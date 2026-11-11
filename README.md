@@ -5,8 +5,12 @@ A FastAPI service that takes a CSV of hospitals, creates each one in the
 single batch, and activates the batch once every hospital exists. It ships with
 a small web UI for uploading files and watching batches progress.
 
-- **Live app:** _add your Render URL here_
-- **Interactive API docs:** `/docs` on the running service
+- **Live app:** https://hospital-bulk-processor-awpg.onrender.com
+- **Interactive API docs:** https://hospital-bulk-processor-awpg.onrender.com/docs
+
+Both this service and the upstream directory run on Render's free tier, which
+sleeps after inactivity: the first request after a quiet spell can take 30–60 s
+while they wake up. After that, a 20-row CSV completes in about 6 s.
 
 ## Quick start
 
@@ -27,6 +31,8 @@ Try it from the command line:
 
 ```bash
 curl -F file=@samples/hospitals_20.csv http://localhost:8000/hospitals/bulk
+# or against the live app
+curl -F file=@samples/hospitals_20.csv https://hospital-bulk-processor-awpg.onrender.com/hospitals/bulk
 ```
 
 ## API
