@@ -1,0 +1,15 @@
+[project]
+name = "paribus-hospital-bulk"
+version = "1.0.0"
+description = "Bulk CSV processing service for the Hospital Directory API"
+requires-python = ">=3.9"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error"]
+markers = [
+    "live: talks to the real Hospital Directory API (opt-in: RUN_LIVE_TESTS=1)",
+    "e2e: drives the web UI in a real browser (needs Playwright and Google Chrome)",
+]

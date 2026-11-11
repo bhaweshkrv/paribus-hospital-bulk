@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: hospital-bulk-processor
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: UPSTREAM_BASE_URL
+        value: https://hospital-directory.onrender.com
+      - key: MAX_CONCURRENCY
+        value: "20"

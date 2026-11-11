@@ -1,0 +1,16 @@
+name,address,phone
+St. Mary's General Hospital,"120 Main St, Springfield",
+Riverside Medical Center,"127 Oak Ave, Springfield",555-2101
+Northgate Children's Hospital,"134 Elm St, Springfield",555-2102
+Lakeview Community Hospital,"141 Maple Dr, Springfield",555-2103
+Mercy Heart Institute,"148 Cedar Ln, Springfield",
+Summit Orthopedic Center,"155 Pine Rd, Springfield",555-2105
+Harborview Trauma Center,"162 Lake Blvd, Springfield",555-2106
+Cedar Grove Clinic,"169 River Rd, Springfield",555-2107
+Pinecrest Rehabilitation Hospital,"176 Hill St, Springfield",
+Bayside Psychiatric Hospital [server-error],"177 Oak Ave, Springfield",555-2111
+Cedar Grove Clinic [rejected],"149 River Rd, Springfield",555-2107
+Bayside Psychiatric Hospital,"197 Oak Ave, Springfield",555-2111
+Maple Valley Hospital,"204 Elm St, Springfield",
+Sunrise Eye Institute,"211 Maple Dr, Springfield",555-2113
+Granite Peak Medical Center,"218 Cedar Ln, Springfield",555-2114

@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      # GitHub's Ubuntu runners ship Google Chrome, which the browser tests drive.
+      - run: pytest --cov=app --cov-branch --cov-report=term-missing
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t hospital-bulk .
+      - name: Container starts and passes its health check
+        run: |
+          docker run -d --name app -p 8000:8000 -e WARM_UPSTREAM_ON_STARTUP=false hospital-bulk
+          for i in $(seq 1 30); do curl -fs localhost:8000/health && exit 0; sleep 1; done
+          docker logs app; exit 1

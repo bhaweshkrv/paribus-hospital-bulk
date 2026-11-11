@@ -1,0 +1,892 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hospital Bulk Import</title>
+<meta name="description" content="Upload a CSV of hospitals, create them in the Hospital Directory as one batch, and activate them together.">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/static/fonts/public-sans-400-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/icons/phosphor.css">
+<style>
+@font-face {
+  font-family: "Public Sans";
+  src: url("/static/fonts/public-sans-400-700.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/static/fonts/ibm-plex-mono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/static/fonts/ibm-plex-mono-500.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+
+/* Tokens. Accent green doubles as the "live" state; amber and red are status-only.
+   Radius rule: containers 12px, controls 8px, progress cells 4px. */
+:root {
+  --bg: #F3F5F4;
+  --rail: #FFFFFF;
+  --surface: #FFFFFF;
+  --sunken: #ECF0EE;
+  --line: #DFE5E2;
+  --line-strong: #C5CFCB;
+  --text: #121816;
+  --muted: #586562;
+  --faint: #86918E;
+  --accent: #0B7A57;
+  --accent-hover: #086549;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E3F2EC;
+  --held: #C98507;
+  --held-soft: #FBF2DF;
+  --failed: #C1382C;
+  --failed-soft: #FBEBE9;
+  --focus: #2563EB;
+  --r-container: 12px;
+  --r-control: 8px;
+  --r-cell: 4px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D1110; --rail: #111615; --surface: #141A18; --sunken: #1A2120;
+    --line: #232B29; --line-strong: #34403C; --text: #E6ECE9; --muted: #9AA7A3; --faint: #6F7C78;
+    --accent: #3BC291; --accent-hover: #5CD1A7; --accent-ink: #04150E; --accent-soft: #12271F;
+    --held: #E6A73A; --held-soft: #2A2112; --failed: #F06E5E; --failed-soft: #2C1714; --focus: #7AA7FF;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D1110; --rail: #111615; --surface: #141A18; --sunken: #1A2120;
+  --line: #232B29; --line-strong: #34403C; --text: #E6ECE9; --muted: #9AA7A3; --faint: #6F7C78;
+  --accent: #3BC291; --accent-hover: #5CD1A7; --accent-ink: #04150E; --accent-soft: #12271F;
+  --held: #E6A73A; --held-soft: #2A2112; --failed: #F06E5E; --failed-soft: #2C1714; --focus: #7AA7FF;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 15px/1.5 "Public Sans", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+:where(h1, h2, h3, p, ol, ul, dl, dd, figure) { margin: 0; }
+:where(ol, ul) { padding: 0; list-style: none; }
+:where(button, input) { font: inherit; color: inherit; }
+:where(a) { color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.92em; letter-spacing: -0.01em; }
+.num { font-variant-numeric: tabular-nums; }
+.ph { line-height: 1; }
+
+/* ---------- App shell ---------- */
+.app { display: grid; grid-template-columns: 288px minmax(0, 1fr); min-height: 100dvh; }
+
+.rail {
+  position: sticky; top: 0; height: 100dvh;
+  display: flex; flex-direction: column; gap: 20px;
+  padding: 20px 14px 16px;
+  background: var(--rail);
+  border-right: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; font-weight: 600; letter-spacing: -0.01em; }
+.brand-mark {
+  display: grid; place-items: center; width: 32px; height: 32px; flex: none;
+  border-radius: var(--r-control); background: var(--accent); color: var(--accent-ink); font-size: 18px;
+}
+.rail-section { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.rail-heading { display: flex; justify-content: space-between; align-items: baseline; padding: 0 6px 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.batch-list { display: grid; gap: 4px; align-content: start; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+.batch-item {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 2px 10px; align-items: center;
+  width: 100%; padding: 9px 8px; border: 0; border-radius: var(--r-control); background: none;
+  text-align: left; cursor: pointer;
+}
+.batch-item:hover { background: var(--sunken); }
+.batch-item[aria-current="true"] { background: var(--accent-soft); }
+.batch-item .ph { font-size: 18px; grid-row: span 2; }
+.batch-item .title { font-weight: 500; font-size: 14px; }
+.batch-item .meta { grid-column: 2; font-size: 12.5px; color: var(--muted); }
+.batch-item .id { grid-row: 1; grid-column: 3; font-size: 12px; color: var(--faint); }
+.rail-empty { padding: 4px 6px; font-size: 13.5px; color: var(--muted); }
+
+.rail-foot { display: grid; gap: 12px; padding: 14px 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.directory { display: grid; grid-template-columns: 8px 1fr; gap: 0 10px; align-items: center; }
+.directory::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.directory[data-state="up"]::before { background: var(--accent); }
+.directory[data-state="slow"]::before { background: var(--held); }
+.directory[data-state="down"]::before { background: var(--failed); }
+.directory strong { font-weight: 500; }
+.directory span { grid-column: 2; color: var(--muted); font-size: 12.5px; }
+.docs-link { display: inline-flex; gap: 8px; align-items: center; color: var(--muted); text-decoration: none; }
+.docs-link:hover { color: var(--text); }
+
+/* ---------- Stage ---------- */
+.stage { min-width: 0; }
+.view { max-width: 1040px; margin: 0 auto; padding: 48px clamp(20px, 4vw, 56px) 72px; }
+.view-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 32px; align-items: start; }
+.view-head > div { min-width: 0; }
+h1 { font-size: 28px; line-height: 1.2; font-weight: 600; letter-spacing: -0.025em; }
+.lede { margin-top: 8px; max-width: 62ch; color: var(--muted); font-size: 15.5px; }
+.kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 10px; color: var(--muted); font-size: 13px; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 40px; padding: 0 16px; white-space: nowrap;
+  border-radius: var(--r-control); border: 1px solid var(--line-strong);
+  background: var(--surface); font-weight: 500; font-size: 14px; cursor: pointer;
+  transition: background-color 120ms, border-color 120ms, transform 80ms;
+}
+.btn:hover { border-color: var(--muted); }
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn .ph { font-size: 17px; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-danger { color: var(--failed); }
+.btn-danger:hover { border-color: var(--failed); }
+.btn-danger.is-armed { background: var(--failed); border-color: var(--failed); color: var(--surface); }
+.btn-block { width: 100%; }
+.btn-icon { min-height: 28px; width: 28px; padding: 0; border-color: transparent; background: none; color: var(--muted); }
+.btn-icon:hover { color: var(--text); background: var(--sunken); border-color: transparent; }
+.link-button { display: inline-flex; gap: 6px; align-items: center; padding: 0; border: 0; background: none; cursor: pointer; color: var(--accent); font-size: inherit; }
+.link-button:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.spin { display: inline-block; animation: spin 900ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Import view ---------- */
+.dropzone {
+  position: relative; display: grid; justify-items: center; align-content: center; gap: 10px;
+  min-height: 300px; margin-top: 32px; padding: 32px;
+  background: var(--surface); border: 1.5px dashed var(--line-strong); border-radius: var(--r-container);
+  text-align: center; cursor: pointer; transition: border-color 140ms, background-color 140ms;
+}
+.dropzone:hover { border-color: var(--muted); }
+.dropzone.is-over { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.dropzone input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.dropzone-icon { display: grid; place-items: center; width: 64px; height: 64px; margin-bottom: 6px; border-radius: 50%; background: var(--sunken); color: var(--muted); font-size: 30px; }
+.dropzone-title { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.dropzone-sub { color: var(--muted); }
+.dropzone .btn { margin-top: 6px; }
+.dropzone.is-busy .dropzone-icon { color: var(--accent); }
+.format { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; margin-top: 12px; color: var(--muted); font-size: 13.5px; }
+.format code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; padding: 2px 6px; border-radius: var(--r-cell); background: var(--sunken); color: var(--text); }
+
+.flow { margin-top: 48px; }
+.flow h2 { font-size: 15px; font-weight: 600; }
+.flow ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 16px; }
+.flow li { position: relative; display: grid; grid-template-columns: 28px 1fr; gap: 4px 14px; }
+.flow li:not(:last-child)::after {
+  content: ""; position: absolute; top: 14px; left: 42px; right: -12px; height: 1px; background: var(--line-strong);
+}
+.flow .swatch { grid-row: span 2; width: 28px; height: 28px; }
+.flow strong { position: relative; z-index: 1; justify-self: start; padding-right: 10px; background: var(--bg); font-weight: 600; line-height: 28px; }
+.flow p { grid-column: 2; color: var(--muted); font-size: 14px; }
+.flow-note { display: flex; gap: 10px; align-items: flex-start; margin-top: 24px; padding: 12px 14px; border-radius: var(--r-container); background: var(--sunken); color: var(--muted); font-size: 14px; }
+.flow-note .ph { font-size: 18px; margin-top: 1px; }
+
+/* Progress cells, shared by the flow legend and the batch strip */
+.swatch, .cell { display: block; border-radius: var(--r-cell); box-shadow: inset 0 0 0 1.5px var(--line-strong); background: transparent; }
+[data-s="created"] { --fill: var(--held); }
+[data-s="created_and_activated"] { --fill: var(--accent); }
+[data-s="failed"] { --fill: var(--failed); }
+.swatch[data-s]:not([data-s="pending"]), .cell[data-s]:not([data-s="pending"]):not([data-s="rolled_back"]) { background: var(--fill); box-shadow: none; }
+.cell[data-s="rolled_back"] { background: repeating-linear-gradient(135deg, var(--line-strong) 0 2px, transparent 2px 6px); }
+
+/* ---------- Review view ---------- */
+.file-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.file-title .ph { font-size: 26px; color: var(--muted); flex: none; }
+.file-title h1 { overflow-wrap: anywhere; }
+.verdict { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-weight: 500; }
+.verdict .ph { font-size: 19px; }
+.verdict.ok .ph { color: var(--accent); }
+.verdict.bad .ph { color: var(--failed); }
+
+.issues { margin-top: 24px; border-radius: var(--r-container); padding: 6px 0; background: var(--failed-soft); }
+.issues.warn { background: var(--held-soft); }
+.issues h2 { padding: 10px 16px 6px; font-size: 14px; font-weight: 600; }
+.issues li { display: grid; grid-template-columns: 64px 1fr; gap: 12px; padding: 7px 16px; font-size: 14px; }
+.issues .where { color: var(--muted); }
+
+.panel { margin-top: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-container); overflow: hidden; }
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.panel-head h2 { font-size: 15px; font-weight: 600; }
+.panel-head span { color: var(--muted); font-size: 13px; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { padding: 9px 16px; background: var(--sunken); color: var(--muted); font-size: 12.5px; font-weight: 500; text-align: left; white-space: nowrap; }
+td { padding: 11px 16px; border-top: 1px solid var(--line); vertical-align: top; }
+tbody tr:first-child td { border-top: 0; }
+.col-row { width: 56px; color: var(--faint); }
+th.right, td.right { text-align: right; }
+td.muted { color: var(--muted); }
+tr.is-failed td { background: color-mix(in srgb, var(--failed-soft) 70%, transparent); }
+tr.is-hover td { background: var(--sunken); }
+tr.is-flash td { animation: flash 1.2s ease-out; }
+@keyframes flash { from { background: var(--accent-soft); } }
+.error-text { display: block; margin-top: 3px; color: var(--failed); font-size: 13px; }
+
+.action-bar {
+  position: sticky; bottom: 0; z-index: 1;
+  display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: center;
+  margin-top: 8px; padding: 20px 0 16px;
+  background: linear-gradient(to bottom, transparent, var(--bg) 35%);
+}
+
+/* ---------- Batch view ---------- */
+.status-title { display: flex; align-items: center; gap: 12px; }
+.status-title .ph { font-size: 28px; flex: none; }
+.status-title[data-tone="live"] .ph, .status-title[data-tone="busy"] .ph { color: var(--accent); }
+.status-title[data-tone="held"] .ph { color: var(--held); }
+.status-title[data-tone="failed"] .ph { color: var(--failed); }
+.status-title[data-tone="off"] .ph { color: var(--faint); }
+.head-actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 28px; }
+
+.strip { display: grid; gap: 6px; margin-top: 32px; }
+.cell {
+  position: relative; height: 64px; padding: 0; border: 0; cursor: pointer;
+  transition: background-color 280ms ease, box-shadow 280ms ease, transform 120ms;
+}
+.cell:hover { transform: translateY(-2px); }
+.cell span { position: absolute; left: 6px; bottom: 5px; font: 500 11px/1 "IBM Plex Mono", ui-monospace, monospace; color: var(--faint); }
+.cell[data-s]:not([data-s="pending"]):not([data-s="rolled_back"]) span { color: var(--accent-ink); opacity: 0.85; }
+.cell[data-s="pending"] { animation: wait 1.6s ease-in-out infinite; }
+.strip.is-activating .cell { transition-delay: calc(var(--i) * 35ms); }
+@keyframes wait { 50% { box-shadow: inset 0 0 0 1.5px var(--muted); } }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 12px; color: var(--muted); font-size: 13px; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.legend .swatch { width: 12px; height: 12px; }
+
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 28px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.metrics div { padding: 16px 20px; }
+.metrics div + div { border-left: 1px solid var(--line); }
+.metrics div:first-child { padding-left: 0; }
+.metrics dt { color: var(--muted); font-size: 13px; }
+.metrics dd { margin-top: 4px; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.metrics dd small { font-size: 15px; font-weight: 500; color: var(--muted); }
+
+.badge { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 13.5px; }
+.badge .ph { font-size: 16px; }
+.badge[data-s="created"] .ph { color: var(--held); }
+.badge[data-s="created_and_activated"] .ph { color: var(--accent); }
+.badge[data-s="failed"] .ph { color: var(--failed); }
+.badge[data-s="pending"] .ph, .badge[data-s="rolled_back"] .ph { color: var(--faint); }
+
+.banner { display: flex; gap: 10px; align-items: flex-start; margin-top: 20px; padding: 12px 14px; border-radius: var(--r-container); background: var(--held-soft); font-size: 14px; }
+.banner.error { background: var(--failed-soft); }
+.banner .ph { font-size: 18px; margin-top: 1px; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 960px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .rail { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .rail-section { flex: none; }
+  .batch-list { max-height: 216px; }
+  .view { padding-top: 32px; }
+}
+@media (max-width: 720px) {
+  .view-head { grid-template-columns: minmax(0, 1fr); }
+  .head-actions { padding-top: 0; }
+  .flow ol { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .flow li::after { display: none; }
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metrics div:nth-child(3) { border-left: 0; padding-left: 0; }
+  .metrics div:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .cell { height: 40px; }
+  .cell span { display: none; }
+  .hide-sm { display: none; }
+  h1 { font-size: 24px; }
+}
+@media (max-width: 480px) {
+  .view { padding: 24px 16px 56px; }
+  .dropzone { min-height: 240px; padding: 24px 16px; }
+  .head-actions, .head-actions .btn, .action-bar .btn { width: 100%; }
+  .strip { gap: 3px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail" aria-label="Batches">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"><i class="ph ph-hospital"></i></span>
+      Hospital bulk import
+    </div>
+    <button class="btn btn-primary btn-block" id="new-import" type="button"><i class="ph ph-plus" aria-hidden="true"></i>New import</button>
+
+    <div class="rail-section">
+      <div class="rail-heading"><span>Batches</span><span id="batch-count" class="num"></span></div>
+      <ul class="batch-list" id="batch-list"></ul>
+      <p class="rail-empty" id="batch-empty">Imports you run show up here.</p>
+    </div>
+
+    <div class="rail-foot">
+      <p class="directory" id="directory" role="status"><strong>Checking the directory</strong><span>Hospital Directory API</span></p>
+      <a class="docs-link" href="/docs"><i class="ph ph-book-open" aria-hidden="true"></i>API documentation</a>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <!-- Import -->
+    <section class="view" id="view-import" aria-labelledby="import-title">
+      <h1 id="import-title">Import hospitals</h1>
+      <p class="lede">Upload a CSV with up to 20 hospitals. The whole file is checked first, so a bad file never creates anything.</p>
+
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="file-input" accept=".csv,text/csv">
+        <span class="dropzone-icon" aria-hidden="true"><i class="ph ph-file-csv" id="dropzone-glyph"></i></span>
+        <span class="dropzone-title" id="dropzone-title">Drop a CSV file here</span>
+        <span class="dropzone-sub" id="dropzone-sub">or</span>
+        <span class="btn" id="choose" aria-hidden="true"><i class="ph ph-upload-simple"></i>Choose file</span>
+      </label>
+      <div class="format">
+        <span>Columns: <code>name</code> <code>address</code> <code>phone</code> (phone is optional)</span>
+        <button class="link-button" id="sample" type="button"><i class="ph ph-download-simple" aria-hidden="true"></i>Download sample CSV</button>
+      </div>
+      <div class="banner error" id="import-error" role="alert" hidden></div>
+
+      <section class="flow" aria-labelledby="flow-title">
+        <h2 id="flow-title">What happens when you import</h2>
+        <ol>
+          <li><span class="swatch" data-s="pending" aria-hidden="true"></span><strong>Check</strong><p>Every row is validated. Problems are listed before anything is sent.</p></li>
+          <li><span class="swatch" data-s="created" aria-hidden="true"></span><strong>Create</strong><p>All hospitals are created at once, hidden, in a single batch.</p></li>
+          <li><span class="swatch" data-s="created_and_activated" aria-hidden="true"></span><strong>Go live</strong><p>Once every hospital exists, the whole batch is activated together.</p></li>
+        </ol>
+        <p class="flow-note"><i class="ph ph-info" aria-hidden="true"></i>If a hospital can't be created, the batch stays hidden. You can retry the failures or roll the batch back.</p>
+      </section>
+    </section>
+
+    <!-- Review -->
+    <section class="view" id="view-review" aria-labelledby="review-title" hidden>
+      <div class="file-title"><i class="ph ph-file-csv" aria-hidden="true"></i><h1 id="review-title"></h1></div>
+      <p class="verdict" id="review-verdict"></p>
+
+      <section class="issues" id="review-errors" hidden></section>
+      <section class="issues warn" id="review-warnings" hidden></section>
+
+      <div class="panel" id="preview-panel">
+        <div class="panel-head"><h2>Hospitals in this file</h2><span id="preview-count" class="num"></span></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th class="col-row">Row</th><th>Name</th><th>Address</th><th class="hide-sm">Phone</th></tr></thead>
+            <tbody id="preview-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="banner error" id="review-error" role="alert" hidden></div>
+      <div class="action-bar">
+        <button class="btn" id="reset" type="button">Choose another file</button>
+        <button class="btn btn-primary" id="create" type="button">Create hospitals</button>
+      </div>
+    </section>
+
+    <!-- Batch -->
+    <section class="view" id="view-batch" aria-labelledby="batch-title" hidden>
+      <div class="view-head">
+        <div>
+          <p class="kicker">
+            <span>Batch <span class="mono" id="batch-id"></span></span>
+            <button class="btn btn-icon" id="copy-id" type="button" aria-label="Copy batch ID" title="Copy batch ID"><i class="ph ph-copy" aria-hidden="true"></i></button>
+            <span id="batch-when"></span>
+          </p>
+          <h1 class="status-title" id="batch-title"><i class="ph" aria-hidden="true"></i><span></span></h1>
+          <p class="lede" id="batch-lede" aria-live="polite"></p>
+        </div>
+        <div class="head-actions" id="batch-actions">
+          <button class="btn btn-primary" id="resume" type="button" hidden><i class="ph ph-arrow-clockwise" aria-hidden="true"></i><span>Retry failed</span></button>
+          <button class="btn btn-danger" id="rollback" type="button" hidden><i class="ph ph-trash" aria-hidden="true"></i><span>Roll back</span></button>
+        </div>
+      </div>
+
+      <div class="strip" id="strip" role="img"></div>
+      <div class="legend" aria-hidden="true">
+        <span><i class="swatch" data-s="pending"></i>Creating</span>
+        <span><i class="swatch" data-s="created"></i>Created, hidden</span>
+        <span><i class="swatch" data-s="created_and_activated"></i>Live</span>
+        <span><i class="swatch" data-s="failed"></i>Failed</span>
+      </div>
+
+      <dl class="metrics">
+        <div><dt>Created</dt><dd id="m-created"></dd></div>
+        <div><dt>Failed</dt><dd id="m-failed"></dd></div>
+        <div><dt>Processing time</dt><dd id="m-time"></dd></div>
+        <div><dt>Visible in directory</dt><dd id="m-live"></dd></div>
+      </dl>
+
+      <div class="banner" id="batch-warnings" hidden></div>
+      <div class="banner error" id="batch-error" role="alert" hidden></div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Hospitals</h2><span id="rows-count" class="num"></span></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th class="col-row">Row</th><th>Hospital</th><th class="right">Directory ID</th><th class="right hide-sm">Attempts</th><th>Status</th></tr></thead>
+            <tbody id="rows-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const RUNNING = new Set(["pending", "processing", "activating"]);
+  const ROW = {
+    pending: { label: "Creating", icon: "circle-dashed" },
+    created: { label: "Created, hidden", icon: "clock" },
+    created_and_activated: { label: "Live", icon: "check-circle" },
+    failed: { label: "Failed", icon: "x-circle" },
+    rolled_back: { label: "Rolled back", icon: "trash" },
+  };
+  const JOB = {
+    pending: { label: "Starting", icon: "spinner-gap", tone: "busy" },
+    processing: { label: "Creating", icon: "spinner-gap", tone: "busy" },
+    activating: { label: "Activating", icon: "spinner-gap", tone: "busy" },
+    completed: { label: "Live", icon: "check-circle", tone: "live" },
+    partially_failed: { label: "Some failed", icon: "x-circle", tone: "failed" },
+    activation_failed: { label: "Not activated", icon: "warning-circle", tone: "held" },
+    rolled_back: { label: "Rolled back", icon: "trash", tone: "off" },
+  };
+  const TONE_COLOR = { live: "var(--accent)", busy: "var(--accent)", held: "var(--held)", failed: "var(--failed)", off: "var(--faint)" };
+  const SAMPLE = [
+    "name,address,phone",
+    "General Hospital,\"123 Main St, Springfield\",555-0100",
+    "Riverside Medical Center,45 River Rd,555-0101",
+    "Northgate Children's Hospital,9 Elm St,",
+    "Lakeview Community Hospital,300 Lake Blvd,555-0103",
+    "Summit Orthopedic Center,12 Hill St,555-0104",
+  ].join("\n") + "\n";
+
+  let file = null;
+  let report = null;
+  let current = null;
+  let pollTimer = null;
+
+  // ---------- helpers ----------
+  async function api(path, options = {}) {
+    let response;
+    try {
+      response = await fetch(path, options);
+    } catch {
+      throw new Error("Couldn't reach the import service. Check that it's running, then try again.");
+    }
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(typeof body.detail === "string" ? body.detail : `The request failed (HTTP ${response.status}).`);
+      error.body = body;
+      throw error;
+    }
+    return body;
+  }
+  function el(tag, props = {}, ...children) {
+    const node = document.createElement(tag);
+    Object.assign(node, props);
+    node.append(...children.filter((c) => c !== null && c !== undefined));
+    return node;
+  }
+  function icon(name, extra = "") {
+    const node = el("i", { className: `ph ph-${name} ${extra}`.trim() });
+    node.setAttribute("aria-hidden", "true");
+    return node;
+  }
+  function plural(n, word) { return `${n} ${word}${n === 1 ? "" : "s"}`; }
+  function seconds(s) { return s < 10 ? `${s.toFixed(1)} s` : `${Math.round(s)} s`; }
+  function ago(iso) {
+    const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins} min ago`;
+    const hours = Math.round(mins / 60);
+    return hours < 24 ? `${hours} h ago` : new Date(iso).toLocaleDateString();
+  }
+  function banner(node, message) {
+    node.replaceChildren(icon("warning-circle"), el("span", { textContent: message || "" }));
+    node.hidden = !message;
+  }
+  function showView(name) {
+    for (const view of ["import", "review", "batch"]) $(`view-${view}`).hidden = view !== name;
+    if (name !== "batch") {
+      clearTimeout(pollTimer);
+      current = null;
+      history.replaceState(null, "", location.pathname);
+      markCurrent();
+    }
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- directory health ----------
+  async function checkDirectory() {
+    const node = $("directory");
+    const set = (state, title, detail) => {
+      node.dataset.state = state;
+      node.replaceChildren(el("strong", { textContent: title }), el("span", { textContent: detail }));
+    };
+    try {
+      const { reachable, latency_ms } = await api("/health/upstream");
+      if (!reachable) set("down", "Directory unreachable", "Imports will fail until it responds");
+      else if (latency_ms > 3000) set("slow", "Directory online", `Was asleep, took ${Math.round(latency_ms / 1000)} s to wake`);
+      else set("up", "Directory online", `Responded in ${latency_ms} ms`);
+    } catch {
+      set("down", "Import service unreachable", "Check that the server is running");
+    }
+  }
+
+  // ---------- import ----------
+  function setDropzoneBusy(busy) {
+    $("dropzone").classList.toggle("is-busy", busy);
+    $("dropzone-glyph").className = busy ? "ph ph-spinner-gap spin" : "ph ph-file-csv";
+    $("dropzone-title").textContent = busy ? "Checking your file" : "Drop a CSV file here";
+    $("dropzone-sub").hidden = busy;
+    $("choose").hidden = busy;
+  }
+
+  async function chooseFile(chosen) {
+    if (!chosen) return;
+    file = chosen;
+    banner($("import-error"), "");
+    setDropzoneBusy(true);
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      report = await api("/hospitals/bulk/validate", { method: "POST", body: form });
+      renderReview();
+      showView("review");
+    } catch (error) {
+      banner($("import-error"), error.message);
+    } finally {
+      setDropzoneBusy(false);
+      $("file-input").value = "";
+    }
+  }
+
+  function issueList(title, issues) {
+    return [
+      el("h2", { textContent: title }),
+      el("ul", {}, ...issues.map((issue) => el("li", {},
+        el("span", { className: "where", textContent: issue.row ? `Row ${issue.row}` : "File" }),
+        el("span", { textContent: issue.message }),
+      ))),
+    ];
+  }
+
+  function renderReview() {
+    $("review-title").textContent = file.name;
+    const verdict = $("review-verdict");
+    verdict.className = `verdict ${report.valid ? "ok" : "bad"}`;
+    verdict.replaceChildren(
+      icon(report.valid ? "check-circle" : "x-circle"),
+      el("span", {
+        textContent: report.valid
+          ? `${plural(report.total_hospitals, "hospital")} ready to import`
+          : `${plural(report.errors.length, "problem")} to fix. Nothing has been created.`,
+      }),
+    );
+
+    $("review-errors").hidden = !report.errors.length;
+    $("review-errors").replaceChildren(...issueList("Fix these, then upload the file again", report.errors));
+    $("review-warnings").hidden = !report.warnings.length;
+    $("review-warnings").replaceChildren(...issueList("Worth checking", report.warnings));
+
+    $("preview-panel").hidden = !report.hospitals.length;
+    $("preview-count").textContent = plural(report.hospitals.length, "row");
+    $("preview-body").replaceChildren(...report.hospitals.map((h) => el("tr", {},
+      el("td", { className: "col-row num", textContent: h.row }),
+      el("td", { textContent: h.name }),
+      el("td", { className: "muted", textContent: h.address }),
+      el("td", { className: "muted hide-sm num", textContent: h.phone || "-" }),
+    )));
+
+    const create = $("create");
+    create.hidden = !report.valid;
+    create.disabled = false;
+    create.replaceChildren(el("span", { textContent: `Create ${plural(report.total_hospitals, "hospital")}` }));
+    $("reset").className = report.valid ? "btn" : "btn btn-primary";
+    banner($("review-error"), "");
+  }
+
+  async function createBatch() {
+    const create = $("create");
+    create.disabled = true;
+    create.replaceChildren(icon("spinner-gap", "spin"), el("span", { textContent: "Starting" }));
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const job = await api("/hospitals/bulk?wait=false", { method: "POST", body: form });
+      file = null;
+      showBatch(job);
+      refreshBatches();
+    } catch (error) {
+      renderReview();
+      banner($("review-error"), error.message);
+    }
+  }
+
+  // ---------- batch ----------
+  function showBatch(job) {
+    const previous = current && current.batch_id === job.batch_id ? current : null;
+    current = job;
+    if (!previous) {
+      for (const view of ["import", "review"]) $(`view-${view}`).hidden = true;
+      $("view-batch").hidden = false;
+      history.replaceState(null, "", `#batch=${job.batch_id}`);
+      window.scrollTo(0, 0);
+    }
+    renderBatchHead(job);
+    renderStrip(job, previous);
+    renderMetrics(job);
+    renderRows(job);
+    markCurrent();
+    clearTimeout(pollTimer);
+    if (RUNNING.has(job.status)) pollTimer = setTimeout(() => poll(job.batch_id), 400);
+  }
+
+  async function poll(batchId) {
+    try {
+      const job = await api(`/hospitals/bulk/${batchId}`);
+      if (current && current.batch_id === batchId) {
+        showBatch(job);
+        refreshBatches();
+      }
+    } catch {
+      if (current && current.batch_id === batchId) pollTimer = setTimeout(() => poll(batchId), 1500);
+    }
+  }
+
+  function renderBatchHead(job) {
+    const n = job.total_hospitals;
+    const meta = JOB[job.status] || { label: job.status, icon: "info", tone: "off" };
+    const [title, lede] = {
+      pending: ["Starting the import", `Preparing ${plural(n, "hospital")}.`],
+      processing: [`Creating ${plural(n, "hospital")}`, `${job.processed_hospitals} of ${n} created so far. They stay hidden until all of them exist.`],
+      activating: ["Activating the batch", `All ${n} created. Making them visible in the directory.`],
+      completed: [`${plural(n, "hospital")} live`, "Every hospital was created and the batch is visible in the directory."],
+      partially_failed: [`${plural(job.failed_hospitals, "hospital")} failed`, "The batch is still hidden, so nothing is visible in the directory yet. Retry the failed hospitals, or roll the batch back."],
+      activation_failed: ["Created, but not activated", `All ${plural(n, "hospital")} exist but the batch couldn't be activated. Retry to activate it.`],
+      rolled_back: ["Batch rolled back", "The hospitals this batch created were deleted from the directory."],
+    }[job.status] || [meta.label, ""];
+
+    const heading = $("batch-title");
+    heading.dataset.tone = meta.tone;
+    heading.querySelector("i").className = `ph ph-${meta.icon}${meta.tone === "busy" ? " spin" : ""}`;
+    heading.querySelector("span").textContent = title;
+    $("batch-lede").textContent = lede;
+    $("batch-id").textContent = job.batch_id;
+    $("batch-when").textContent = `Started ${ago(job.created_at)}`;
+
+    banner($("batch-warnings"), (job.warnings || []).join(" "));
+    banner($("batch-error"), "");
+
+    const resume = $("resume");
+    resume.hidden = !job.resumable;
+    resume.disabled = false;
+    resume.querySelector("span").textContent = job.status === "activation_failed"
+      ? "Retry activation"
+      : `Retry ${plural(job.failed_hospitals, "failed hospital")}`;
+    $("rollback").hidden = RUNNING.has(job.status) || job.status === "rolled_back";
+    disarmRollback();
+    $("batch-actions").hidden = resume.hidden && $("rollback").hidden;
+  }
+
+  function renderStrip(job, previous) {
+    const strip = $("strip");
+    if (strip.dataset.batch !== job.batch_id || strip.children.length !== job.hospitals.length) {
+      strip.dataset.batch = job.batch_id;
+      strip.style.gridTemplateColumns = `repeat(${job.hospitals.length}, minmax(0, 1fr))`;
+      strip.replaceChildren(...job.hospitals.map((h, i) => {
+        const cell = el("button", { className: "cell", type: "button" }, el("span", { textContent: h.row }));
+        cell.style.setProperty("--i", i);
+        cell.addEventListener("click", () => focusRow(h.row));
+        cell.addEventListener("mouseenter", () => hoverRow(h.row, true));
+        cell.addEventListener("mouseleave", () => hoverRow(h.row, false));
+        return cell;
+      }));
+    }
+    // One orchestrated moment: when the batch goes live, the cells turn green left to right.
+    const justActivated = previous && !previous.batch_activated && job.batch_activated;
+    strip.classList.toggle("is-activating", Boolean(justActivated));
+    job.hospitals.forEach((h, i) => {
+      const cell = strip.children[i];
+      cell.dataset.s = h.status;
+      cell.setAttribute("aria-label", `Row ${h.row}, ${h.name}: ${(ROW[h.status] || {}).label || h.status}`);
+      cell.title = `Row ${h.row}: ${h.name}`;
+    });
+    strip.setAttribute("aria-label", `${job.processed_hospitals} of ${job.total_hospitals} hospitals created, ${job.failed_hospitals} failed`);
+  }
+
+  function renderMetrics(job) {
+    $("m-created").replaceChildren(String(job.processed_hospitals), el("small", { textContent: ` / ${job.total_hospitals}` }));
+    $("m-failed").textContent = job.failed_hospitals;
+    $("m-time").textContent = seconds(job.processing_time_seconds);
+    $("m-live").textContent = job.batch_activated ? "Yes" : "No";
+  }
+
+  function renderRows(job) {
+    $("rows-count").textContent = plural(job.total_hospitals, "row");
+    $("rows-body").replaceChildren(...job.hospitals.map((h) => {
+      const meta = ROW[h.status] || { label: h.status, icon: "info" };
+      const name = el("td", { textContent: h.name });
+      if (h.error) name.append(el("span", { className: "error-text", textContent: h.error }));
+      const badge = el("span", { className: "badge" }, icon(meta.icon), meta.label);
+      badge.dataset.s = h.status;
+      const row = el("tr", { className: h.status === "failed" ? "is-failed" : "", id: `row-${h.row}` },
+        el("td", { className: "col-row num", textContent: h.row }),
+        name,
+        el("td", { className: "right num mono", textContent: h.hospital_id ?? "-" }),
+        el("td", { className: "right num muted hide-sm", textContent: h.attempts }),
+        el("td", {}, badge),
+      );
+      return row;
+    }));
+  }
+
+  function focusRow(rowNumber) {
+    const row = $(`row-${rowNumber}`);
+    if (!row) return;
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.remove("is-flash");
+    void row.offsetWidth;
+    row.classList.add("is-flash");
+  }
+  function hoverRow(rowNumber, on) {
+    const row = $(`row-${rowNumber}`);
+    if (row) row.classList.toggle("is-hover", on);
+  }
+
+  async function resumeBatch() {
+    const resume = $("resume");
+    resume.disabled = true;
+    try {
+      showBatch(await api(`/hospitals/bulk/${current.batch_id}/resume?wait=false`, { method: "POST" }));
+    } catch (error) {
+      banner($("batch-error"), error.message);
+      resume.disabled = false;
+    }
+  }
+
+  let armTimer = null;
+  function disarmRollback() {
+    clearTimeout(armTimer);
+    const button = $("rollback");
+    button.classList.remove("is-armed");
+    button.querySelector("span").textContent = "Roll back";
+  }
+  async function rollbackBatch() {
+    const button = $("rollback");
+    if (!button.classList.contains("is-armed")) {
+      button.classList.add("is-armed");
+      button.querySelector("span").textContent = `Delete ${plural(current.processed_hospitals, "hospital")}`;
+      armTimer = setTimeout(disarmRollback, 5000);
+      return;
+    }
+    button.disabled = true;
+    try {
+      const { job } = await api(`/hospitals/bulk/${current.batch_id}`, { method: "DELETE" });
+      showBatch(job);
+      refreshBatches();
+    } catch (error) {
+      banner($("batch-error"), error.message);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  // ---------- batch list ----------
+  async function refreshBatches() {
+    let jobs;
+    try { jobs = await api("/hospitals/bulk"); } catch { return; }
+    $("batch-empty").hidden = jobs.length > 0;
+    $("batch-count").textContent = jobs.length || "";
+    $("batch-list").replaceChildren(...jobs.map((job) => {
+      const meta = JOB[job.status] || { label: job.status, icon: "info", tone: "off" };
+      const glyph = icon(meta.icon, meta.tone === "busy" ? "spin" : "");
+      glyph.style.color = TONE_COLOR[meta.tone];
+      const button = el("button", { className: "batch-item", type: "button" },
+        glyph,
+        el("span", { className: "title", textContent: plural(job.total_hospitals, "hospital") }),
+        el("span", { className: "id mono", textContent: job.batch_id.slice(0, 6) }),
+        el("span", { className: "meta", textContent: `${meta.label}, ${ago(job.created_at)}` }),
+      );
+      button.dataset.batch = job.batch_id;
+      button.addEventListener("click", () => openBatch(job.batch_id));
+      return el("li", {}, button);
+    }));
+    markCurrent();
+  }
+  function markCurrent() {
+    for (const button of $("batch-list").querySelectorAll("button")) {
+      button.setAttribute("aria-current", String(Boolean(current) && button.dataset.batch === current.batch_id));
+    }
+  }
+  async function openBatch(batchId) {
+    try {
+      current = null;
+      showBatch(await api(`/hospitals/bulk/${batchId}`));
+    } catch {
+      showView("import");
+    }
+  }
+
+  // ---------- wiring ----------
+  const dropzone = $("dropzone");
+  $("file-input").addEventListener("change", (e) => chooseFile(e.target.files[0]));
+  dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("is-over"); });
+  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("is-over"));
+  dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("is-over");
+    chooseFile(e.dataTransfer.files[0]);
+  });
+  $("sample").addEventListener("click", () => {
+    const link = el("a", { href: URL.createObjectURL(new Blob([SAMPLE], { type: "text/csv" })), download: "hospitals-sample.csv" });
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
+  $("new-import").addEventListener("click", () => showView("import"));
+  $("reset").addEventListener("click", () => { showView("import"); $("file-input").click(); });
+  $("create").addEventListener("click", createBatch);
+  $("resume").addEventListener("click", resumeBatch);
+  $("rollback").addEventListener("click", rollbackBatch);
+  $("copy-id").addEventListener("click", async () => {
+    const glyph = $("copy-id").firstElementChild;
+    try {
+      await navigator.clipboard.writeText(current.batch_id);
+      glyph.className = "ph ph-check";
+      setTimeout(() => { glyph.className = "ph ph-copy"; }, 1500);
+    } catch { /* clipboard unavailable; the ID is selectable text */ }
+  });
+
+  checkDirectory();
+  setInterval(checkDirectory, 60000);
+  refreshBatches();
+  setInterval(refreshBatches, 30000);
+  // Batch links (#batch=<id>) work on load and when the hash changes later,
+  // e.g. a pasted link or the browser's back button.
+  function openFromHash() {
+    const linked = new URLSearchParams(location.hash.slice(1)).get("batch");
+    if (linked && (!current || current.batch_id !== linked)) openBatch(linked);
+  }
+  window.addEventListener("hashchange", openFromHash);
+  openFromHash();
+})();
+</script>
+</body>
+</html>

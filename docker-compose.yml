@@ -1,0 +1,11 @@
+services:
+  bulk-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      UPSTREAM_BASE_URL: https://hospital-directory.onrender.com
+      MAX_CONCURRENCY: "20"
+      MAX_ATTEMPTS: "3"
+      LOG_LEVEL: INFO
+    restart: unless-stopped
