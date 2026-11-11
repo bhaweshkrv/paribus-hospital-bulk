@@ -4,3 +4,6 @@ httpx==0.28.1
 pydantic==2.10.4
 pydantic-settings==2.7.1
 python-multipart==0.0.20
+# Pinned: newer anyio deprecates an alias Starlette 0.41 still imports, which
+# fails collection under filterwarnings=error.
+anyio==4.12.1
